@@ -17,3 +17,28 @@ jobs:
         steps:
             - uses: actions/checkout@v6
             - run: docker build --no-cache -t flowise .
+
+    # docker/Dockerfile is what the Docker Hub workflow publishes as flowiseai/flowise,
+    # so build it on both architectures and check the image actually starts.
+    build-docker-image:
+        runs-on: ${{ matrix.runner }}
+        strategy:
+            fail-fast: false
+            matrix:
+                runner: [ubuntu-latest, ubuntu-24.04-arm]
+        steps:
+            - uses: actions/checkout@v6
+            - run: docker build --no-cache -f docker/Dockerfile -t flowise-docker .
+            - name: Smoke test
+              run: |
+                  docker run -d --name flowise -p 3000:3000 flowise-docker
+                  for i in $(seq 1 60); do
+                      curl -fsS http://localhost:3000/api/v1/ping && break
+                      sleep 5
+                  done
+                  curl -fsS http://localhost:3000/api/v1/ping
+                  docker exec flowise node -v
+                  docker exec flowise sh -c 'command -v flowise'
+            - name: Container logs
+              if: always()
+              run: docker logs flowise || true
